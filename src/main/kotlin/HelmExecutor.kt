@@ -6,27 +6,68 @@ import arrow.core.right
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
-class HelmExecutor {
+class HelmExecutor : Executor() {
 
-    fun execute(command: List<String>): Either<Throwable, String> {
+    private fun execute(command: String): Either<Throwable, String> {
         return try {
-            // Démarre le processus
-            val process = ProcessBuilder(command)
+            val process = ProcessBuilder(command.split(" "))
                 .redirectErrorStream(true)
                 .start()
 
-            // Capture la sortie
             val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
 
-            // Vérifie le code de sortie
             val exitCode = process.waitFor()
             if (exitCode == 0) {
                 output.right()
             } else {
-                RuntimeException("Helm command failed with exit code $exitCode. Output: $output").left()
+                RuntimeException("Command failed with exit code $exitCode. Output: $output").left()
             }
         } catch (e: Throwable) {
             e.left()
         }
+    }
+
+    override fun install(
+        name: String,
+        source: String,
+        options: Map<String, String>?,
+        files: List<String>?
+    ): Either<Throwable, String> {
+        val command = helm {
+            command("install")
+            flag(name)
+            flag(source)
+            options?.let { set(it) }
+            files?.let { values(it) }
+        }.build()
+
+        return execute(command)
+    }
+
+    override fun update(
+        name: String,
+        source: String,
+        options: Map<String, String>?,
+        files: List<String>?
+    ): Either<Throwable, String> {
+        val command = helm {
+            command("upgrade")
+            flag("--install")
+            flag(name)
+            flag(source)
+            options?.let { set(it) }
+            files?.let { values(it) }
+        }.build()
+
+        return execute(command)
+    }
+
+    override fun delete(name: String): Either<Throwable, String> {
+        val command = helm {
+            command("uninstall")
+            flag(name)
+        }.build()
+
+        return execute(command)
     }
 }
